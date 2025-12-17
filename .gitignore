@@ -1,0 +1,17 @@
+# 가상환경 폴더 제외
+.venv/
+venv/
+ENV/
+
+# 환경변수 파일 제외 (보안)
+.env
+
+# 파이썬 컴파일 파일 제외
+__pycache__/
+*.py[cod]
+
+# 맥북 시스템 파일 제외
+.DS_Store
+
+# VSCode 설정 폴더 제외
+.vscode/
