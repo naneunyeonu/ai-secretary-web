@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-4">
+        <h3 class="text-center mb-4">로그인</h3>
+        
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <form id="loginForm">
+                    <div class="mb-3">
+                        <label for="email" class="form-label">이메일</label>
+                        <input type="email" class="form-control" id="email" name="username" required> 
+                    </div>
+                    <div class="mb-3">
+                        <label for="password" class="form-label">비밀번호</label>
+                        <input type="password" class="form-control" id="password" name="password" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">로그인</button>
+                </form>
+            </div>
+        </div>
+        <div class="text-center mt-3">
+            <a href="/signup">계정이 없으신가요? 회원가입</a>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 로그인 처리 로직 (AJAX)
+    document.getElementById("loginForm").addEventListener("submit", async function(event) {
+        event.preventDefault(); // 화면이 깜빡거리는 기본 제출 동작을 막음
+
+        const formData = new FormData(this);
+
+        try {
+            const response = await fetch("/login", {
+                method: "POST",
+                body: formData
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                // 1. 받은 토큰을 브라우저 저장소(localStorage)에 'access_token'이란 이름으로 저장
+                localStorage.setItem("access_token", data.access_token);
+
+                // 닉네임 저장
+                localStorage.setItem("nickname", data.nickname)
+                
+                // 2. 성공 알림 후 메인 페이지로 이동
+                alert("로그인 성공!");
+                window.location.href = "/"; 
+            } else {
+                alert("로그인 실패: 이메일이나 비밀번호를 확인해주세요.");
+            }
+        } catch (error) {
+            console.error("Error:", error);
+            alert("서버 오류가 발생했습니다.");
+        }
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+
+{% block content %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-lg-3 mb-4">
+            <div class="card shadow-sm sticky-top" style="top: 80px; z-index: 100;">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0">➕ 관심 종목 추가</h5>
+                </div>
+                <div class="card-body">
+                    <form id="addForm">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">종목 코드 (Ticker)</label>
+                            <input type="text" id="tickerInput" class="form-control" placeholder="예: AAPL, KRW=X" required>
+                            <div class="form-text text-muted" style="font-size: 0.85rem;">
+                                🇺🇸 미국: AAPL, TSLA, NVDA<br>
+                                🇰🇷 한국: 005930.KS (삼성전자)<br>
+                                💱 환율: KRW=X (달러), BTC-USD (코인)
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">카테고리</label>
+                            <select id="categoryInput" class="form-select">
+                                <option value="stock">주식 (Stock)</option>
+                                <option value="currency">환율 (Currency)</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">추가하기</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-9">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h3 class="fw-bold">📊 나의 자산 현황</h3>
+                <button onclick="loadInterests()" class="btn btn-outline-secondary btn-sm">🔄 새로고침</button>
+            </div>
+            
+            <div id="cardContainer" class="row row-cols-1 row-cols-md-2 g-4">
+                </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const token = localStorage.getItem("access_token");
+
+    document.addEventListener("DOMContentLoaded", loadInterests);
+
+    async function loadInterests() {
+        if (!token) { alert("로그인 필요"); window.location.href = "/login"; return; }
+        
+        const container = document.getElementById("cardContainer");
+        
+        try {
+            const response = await fetch("/interests", { headers: { "Authorization": "Bearer " + token } });
+            if (response.status === 401) { alert("세션 만료"); window.location.href = "/login"; return; }
+            
+            const interests = await response.json();
+            container.innerHTML = ""; 
+
+            if (interests.length === 0) {
+                container.innerHTML = `<div class="col-12 text-center text-muted py-5"><h4>등록된 종목이 없습니다.</h4></div>`;
+                return;
+            }
+
+            for (const item of interests) {
+                createCard(item);
+            }
+        } catch (error) { console.error(error); }
+    }
+
+    function createCard(item) {
+        const container = document.getElementById("cardContainer");
+        const cardId = `card-${item.ticker}`;
+
+        // HTML 구조: 가격 -> 차트 -> [AI 분석] -> 뉴스
+        const html = `
+            <div class="col">
+                <div class="card h-100 shadow-sm border-0" id="${cardId}">
+                    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="badge bg-secondary me-2">${item.category.toUpperCase()}</span>
+                            <span class="fw-bold fs-5">${item.ticker}</span>
+                        </div>
+                        <button class="btn btn-sm btn-outline-danger border-0" onclick="deleteInterest('${item.ticker}')">🗑️</button>
+                    </div>
+                    <div class="card-body">
+                        <div class="price-section mb-2">
+                            <h2 class="card-title fw-bold mb-0" id="price-${item.ticker}">Loading...</h2>
+                            <small class="text-muted" id="change-${item.ticker}">데이터 확인 중</small>
+                        </div>
+
+                        <div style="height: 150px; width: 100%;" class="mb-3">
+                            <canvas id="chart-${item.ticker}"></canvas>
+                        </div>
+
+                        <div class="alert alert-light border mb-3" role="alert">
+                            <h6 class="alert-heading fw-bold">🤖 AI 애널리스트 브리핑</h6>
+                            <hr class="my-1">
+                            <div id="ai-${item.ticker}" style="font-size: 0.9rem; line-height: 1.6;">
+                                <div class="d-flex align-items-center text-muted">
+                                    <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                    뉴스를 분석하고 있습니다...
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="news-section">
+                            <h6 class="text-muted mb-2">📢 관련 뉴스 (통합)</h6>
+                            <ul class="list-group list-group-flush list-unstyled" id="news-${item.ticker}" style="font-size: 0.85rem;">
+                                <li class="text-muted"><small>뉴스 로딩 중...</small></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        container.innerHTML += html;
+
+        updateCardData(item.ticker);
+    }
+
+    async function updateCardData(ticker) {
+        // (1) 가격
+        const priceData = await fetchPrice(ticker);
+        
+        // (2) 차트
+        if (priceData) fetchHistoryAndDraw(ticker, priceData.change_percent);
+
+        // (3) 뉴스 (통합)
+        await fetchNews(ticker);
+
+        // 4. [수정] AI 분석 요청에 '랜덤 지연 시간' 추가 (과속 방지 🚦)
+        // 0초 ~ 4초 사이에서 랜덤하게 기다렸다가 요청을 보냅니다.
+        const randomDelay = Math.floor(Math.random() * 4000); 
+        
+        setTimeout(() => {
+            fetchAiBriefing(ticker);
+        }, randomDelay);
+    }
+
+    // [API] 가격
+    async function fetchPrice(ticker) {
+        try {
+            const res = await fetch(`/assets/price/${ticker}`, { headers: { "Authorization": "Bearer " + token } });
+            if (!res.ok) throw new Error();
+            const data = await res.json();
+            
+            const priceEl = document.getElementById(`price-${ticker}`);
+            const changeEl = document.getElementById(`change-${ticker}`);
+            
+            priceEl.innerText = `${data.price.toLocaleString()} ${data.currency}`;
+            
+            let colorClass = "text-secondary";
+            let icon = "-";
+            if (data.change_percent > 0) { colorClass = "text-danger"; icon = "▲"; }
+            else if (data.change_percent < 0) { colorClass = "text-primary"; icon = "▼"; }
+
+            priceEl.className = `card-title fw-bold mb-0 ${colorClass}`;
+            changeEl.innerHTML = `<span class="${colorClass}">${icon} ${data.change_percent}%</span>`;
+            return data;
+        } catch (e) { document.getElementById(`price-${ticker}`).innerText = "N/A"; return null; }
+    }
+
+    // [API] 뉴스 (통합 10개)
+    async function fetchNews(ticker) {
+        try {
+            const res = await fetch(`/assets/news/${ticker}`, { headers: { "Authorization": "Bearer " + token } });
+            const newsList = await res.json();
+            const newsContainer = document.getElementById(`news-${ticker}`);
+            newsContainer.innerHTML = "";
+
+            if (!newsList || newsList.length === 0) {
+                newsContainer.innerHTML = `<li class="text-muted"><small>관련 뉴스가 없습니다.</small></li>`;
+                return;
+            }
+
+            // 최대 5개만 화면에 표시 (너무 길어지니까)
+            newsList.slice(0, 10).forEach(news => {
+                const sourceBadge = news.source.includes("Naver") ? "badge bg-success" : "badge bg-primary";
+                const sourceName = news.source.includes("Naver") ? "국내" : "해외";
+                
+                const li = `
+                    <li class="mb-2 text-truncate">
+                        <span class="${sourceBadge}" style="font-size: 0.6rem;">${sourceName}</span>
+                        <a href="${news.link}" target="_blank" class="text-decoration-none text-dark ms-1">
+                            ${news.title}
+                        </a>
+                    </li>
+                `;
+                newsContainer.innerHTML += li;
+            });
+        } catch (e) {
+            document.getElementById(`news-${ticker}`).innerHTML = `<li class="text-danger"><small>뉴스 로딩 실패</small></li>`;
+        }
+    }
+
+    // [API] AI 브리핑 (NEW ✨)
+    async function fetchAiBriefing(ticker) {
+        try {
+            const aiContainer = document.getElementById(`ai-${ticker}`);
+            const res = await fetch(`/assets/briefing/${ticker}`, { headers: { "Authorization": "Bearer " + token } });
+            
+            if (!res.ok) throw new Error("AI Error");
+            
+            const data = await res.json();
+            // 줄바꿈 문자(\n)를 HTML 태그(<br>)로 변환
+            const formattedText = data.briefing.replace(/\n/g, "<br>");
+            aiContainer.innerHTML = formattedText;
+            
+        } catch (e) {
+            document.getElementById(`ai-${ticker}`).innerText = "AI 분석을 가져오지 못했습니다.";
+        }
+    }
+
+    // [API] 차트
+    async function fetchHistoryAndDraw(ticker, changePercent) {
+        try {
+            const res = await fetch(`/assets/history/${ticker}`, { headers: { "Authorization": "Bearer " + token } });
+            if (!res.ok) return;
+            const data = await res.json();
+            
+            const ctx = document.getElementById(`chart-${ticker}`).getContext('2d');
+            const lineColor = changePercent > 0 ? '#dc3545' : '#0d6efd';
+            const bgColor = changePercent > 0 ? 'rgba(220, 53, 69, 0.1)' : 'rgba(13, 110, 253, 0.1)';
+
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.history.map(h => h.date),
+                    datasets: [{
+                        data: data.history.map(h => h.price),
+                        borderColor: lineColor,
+                        backgroundColor: bgColor,
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { x: { display: false }, y: { display: false } }
+                }
+            });
+        } catch (e) { console.error(e); }
+    }
+
+    // 추가/삭제 이벤트 리스너 (기존과 동일)
+    document.getElementById("addForm").addEventListener("submit", async function(e) {
+        e.preventDefault();
+        const ticker = document.getElementById("tickerInput").value.toUpperCase().trim();
+        const category = document.getElementById("categoryInput").value;
+        if(!ticker) return;
+        
+        // ... (생략: 기존과 동일) ...
+        // 코드 길이상 생략했으나 실제 파일엔 꼭 있어야 합니다! 
+        // 기존 코드 복붙해서 쓰시면 됩니다. 
+        // 혹시 필요하시면 말씀해주세요!
+        
+        try {
+            const response = await fetch("/interests", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+                body: JSON.stringify({ ticker: ticker, category: category })
+            });
+            if (response.ok) { loadInterests(); document.getElementById("tickerInput").value = ""; } 
+            else { const err = await response.json(); alert(err.detail); }
+        } catch (error) { console.error(error); }
+    });
+
+    async function deleteInterest(ticker) {
+        if (!confirm(`정말 ${ticker} 종목을 삭제하시겠습니까?`)) return;
+        try {
+            const response = await fetch("/interests/" + ticker, { method: "DELETE", headers: { "Authorization": "Bearer " + token } });
+            if (response.ok) loadInterests();
+        } catch (error) { console.error(error); }
+    }
+</script>
+{% endblock %}

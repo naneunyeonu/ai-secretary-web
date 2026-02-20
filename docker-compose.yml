@@ -1,0 +1,26 @@
+services:
+  # 1. 우리의 메인 데이터베이스 (PostgreSQL)
+  db:
+    image: postgres:15-alpine
+    container_name: ai_sec_db
+    restart: always
+    environment:
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: mypassword
+      POSTGRES_DB: ai_secretary
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # 2. DB를 웹에서 쉽게 관리하는 도구 (Adminer) - 선택사항이지만 강력 추천
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+
+volumes:
+  postgres_data:

@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 금융 비서</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            padding-top: 60px; 
+            padding-bottom: 80px;
+        }
+        .footer { position: fixed; bottom: 0; width: 100%; height: 60px; line-height: 60px; background-color: #f5f5f5; }
+    </style>
+</head>
+
+<body>
+
+    <nav class="navbar navbar-expand-md navbar-dark bg-dark fixed-top">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">🤖 AI Secretary</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarCollapse">
+                <ul class="navbar-nav me-auto mb-2 mb-md-0">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/">홈</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/dashboard">대시보드</a>
+                    </li>
+                </ul>
+                <div class="d-flex" id="authButtons">
+                    <a href="/login" class="btn btn-outline-light me-2">로그인</a>
+                    <a href="/signup" class="btn btn-warning">회원가입</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container mt-5">
+        {% block content %}
+        {% endblock %}
+    </main>
+
+    <footer class="footer">
+        <div class="container text-center">
+            <span class="text-muted">© 2026 AI Secretary Project</span>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+
+<script>
+    // 토큰이 있으면 로그인 상태로 간주
+    const accessToken = localStorage.getItem("access_token");
+    const nickname = localStorage.getItem("nickname") || "사용자";
+    const authButtons = document.getElementById("authButtons");
+
+    if (accessToken) {
+        // 로그인 상태라면: '로그아웃' 버튼 보여주기
+        authButtons.innerHTML = `
+            <span class="text-white me-3 align-self-center">
+                <strong>${nickname}</stron>님 환영합니다! 👋
+            </span>
+            <button onclick="logout()" class="btn btn-outline-danger">로그아웃</button>
+        `;
+    }
+
+    function logout() {
+        localStorage.removeItem("access_token"); // 토큰 삭제
+        localStorage.removeItem("nickname");
+        alert("로그아웃 되었습니다.");
+        window.location.href = "/"; // 메인으로 이동
+    }
+</script>
+
+</body>
+</html>
+
