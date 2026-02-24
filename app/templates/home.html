@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-lg-4 mb-4">
+            <div class="card shadow-sm border-0 sticky-top" style="top: 80px; z-index: 100;">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0">➕ 내 자산 추가</h5>
+                </div>
+                <div class="card-body">
+                    <form id="portfolioForm">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">종목 코드 (Ticker)</label>
+                            <input type="text" id="p_ticker" class="form-control" placeholder="예: VOO, GOOGL, 005930.KS" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">평균 단가</label>
+                            <input type="number" step="any" id="p_avg_price" class="form-control" placeholder="예: 312.95" required>
+                        </div>
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">보유 주수</label>
+                            <input type="number" step="any" id="p_quantity" class="form-control" placeholder="예: 3" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100 fw-bold">잔고에 추가하기</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-8">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h3 class="fw-bold mb-0">💼 내 잔고</h3>
+                <button onclick="loadPortfolio()" class="btn btn-outline-secondary btn-sm">🔄 새로고침</button>
+            </div>
+            
+            <div id="portfolioContainer" class="d-flex flex-column gap-3">
+                <div class="text-center text-muted py-5">
+                    <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                    데이터를 불러오는 중입니다...
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const token = localStorage.getItem("access_token");
+
+    // 페이지 로드 시 잔고 불러오기
+    document.addEventListener("DOMContentLoaded", loadPortfolio);
+
+    // 숫자에 콤마 찍고 소수점 처리하는 도구
+    function formatNumber(num, currency) {
+        if (currency === 'KRW') {
+            return Math.round(num).toLocaleString('ko-KR'); // 원화는 소수점 제거
+        } else {
+            return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 }); // 달러는 소수점 유지
+        }
+    }
+
+    // 포트폴리오 불러오기 API 호출
+    async function loadPortfolio() {
+        if (!token) { alert("로그인이 필요합니다."); window.location.href = "/login"; return; }
+        
+        const container = document.getElementById("portfolioContainer");
+        
+        try {
+            const response = await fetch("/portfolio", { 
+                headers: { "Authorization": "Bearer " + token } 
+            });
+            
+            if (response.status === 401) { alert("세션 만료"); window.location.href = "/login"; return; }
+            
+            const items = await response.json();
+            container.innerHTML = ""; 
+
+            if (items.length === 0) {
+                container.innerHTML = `
+                    <div class="card border-0 shadow-sm text-center py-5">
+                        <h5 class="text-muted">아직 등록된 자산이 없습니다.</h5>
+                        <p class="text-muted mb-0">왼쪽에서 보유중인 주식을 추가해보세요!</p>
+                    </div>`;
+                return;
+            }
+
+            // 각 아이템별로 카드 생성
+            for (const item of items) {
+                createPortfolioCard(item);
+            }
+        } catch (error) { 
+            console.error("포트폴리오 로드 실패:", error);
+            container.innerHTML = `<div class="alert alert-danger">데이터를 불러오지 못했습니다.</div>`;
+        }
+    }
+
+    // 카드 UI 그리기 (보여주신 스크린샷 스타일 적용 ✨)
+    function createPortfolioCard(item) {
+        const container = document.getElementById("portfolioContainer");
+        
+        // 수익률에 따른 색상 및 화살표
+        const isPositive = item.return_rate >= 0;
+        const colorClass = isPositive ? "text-danger" : "text-primary"; // 한국식: 오르면 빨강, 내리면 파랑
+        const arrow = isPositive ? "▲" : "▼";
+        
+        // 수익금 (현재평가금액 - 매수금액)
+        const profit = item.current_valuation - item.purchase_amount;
+        const profitSign = profit >= 0 ? "+" : "";
+
+        // 원화 환산 텍스트 (달러 주식일 경우만 렌더링)
+        let krwText = "";
+        if (item.currency === "USD" && item.krw_valuation) {
+            krwText = `<div class="text-end text-muted mt-1" style="font-size: 0.85rem;">
+                         (약 ${formatNumber(item.krw_valuation, 'KRW')} 원)
+                       </div>`;
+        }
+
+        // [수정된 HTML 구조]
+    const html = `
+        <div class="card shadow-sm border-0 mb-2">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-3 border-bottom pb-3">
+                    
+                    <div>
+                        <h5 class="fw-bold mb-1">${item.ticker}</h5>
+                        <span class="text-muted" style="font-size: 0.9rem;">현금 ${item.quantity}주</span>
+                    </div>
+
+                    <div class="d-flex align-items-start">
+                        <div class="text-end me-2"> <h4 class="fw-bold mb-0">${formatNumber(item.current_valuation, item.currency)} <span class="fs-6">${item.currency}</span></h4>
+                            <div class="${colorClass} fw-bold" style="font-size: 0.95rem;">
+                                ${arrow} ${formatNumber(Math.abs(profit), item.currency)} (${profitSign}${item.return_rate.toFixed(2)}%)
+                            </div>
+                            ${krwText}
+                        </div>
+                        
+                        <button class="btn btn-sm btn-outline-danger border-0 p-0 ms-1" style="line-height: 1; font-size: 0.8rem;" onclick="deletePortfolioItem(${item.id})">
+                            삭제
+                        </button>
+                    </div>
+                </div>
+
+                <div class="row g-2 text-muted" style="font-size: 0.9rem;">
+                    <div class="col-6 d-flex justify-content-between">
+                        <span>매수금액</span>
+                        <span class="text-dark fw-medium">${formatNumber(item.purchase_amount, item.currency)}</span>
+                    </div>
+                    <div class="col-6 d-flex justify-content-between">
+                        <span>평균단가</span>
+                        <span class="text-dark fw-medium">${formatNumber(item.avg_price, item.currency)}</span>
+                    </div>
+                    <div class="col-6 d-flex justify-content-between">
+                        <span>평가금액</span>
+                        <span class="text-dark fw-medium">${formatNumber(item.current_valuation, item.currency)}</span>
+                    </div>
+                    <div class="col-6 d-flex justify-content-between">
+                        <span>현재가</span>
+                        <span class="text-dark fw-medium">${formatNumber(item.current_price, item.currency)}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    container.insertAdjacentHTML('beforeend', html);
+    }
+
+    // 포트폴리오 추가 이벤트
+    document.getElementById("portfolioForm").addEventListener("submit", async function(e) {
+        e.preventDefault();
+        
+        const ticker = document.getElementById("p_ticker").value.toUpperCase().trim();
+        const avg_price = parseFloat(document.getElementById("p_avg_price").value);
+        const quantity = parseFloat(document.getElementById("p_quantity").value);
+
+        // 추가 중 버튼 비활성화 (로딩 표시)
+        const submitBtn = this.querySelector('button[type="submit"]');
+        submitBtn.disabled = true;
+        submitBtn.innerText = "추가 중...";
+
+        try {
+            const response = await fetch("/portfolio", {
+                method: "POST",
+                headers: { 
+                    "Content-Type": "application/json", 
+                    "Authorization": "Bearer " + token 
+                },
+                body: JSON.stringify({ ticker: ticker, avg_price: avg_price, quantity: quantity })
+            });
+
+            if (response.ok) { 
+                // 성공 시 폼 초기화 및 리스트 새로고침
+                document.getElementById("portfolioForm").reset();
+                loadPortfolio(); 
+            } else { 
+                const err = await response.json(); 
+                alert("추가 실패: " + err.detail); 
+            }
+        } catch (error) { 
+            console.error(error); 
+            alert("서버 연결에 실패했습니다.");
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.innerText = "잔고에 추가하기";
+        }
+    });
+
+    // 포트폴리오 삭제 이벤트
+    async function deletePortfolioItem(itemId) {
+        if (!confirm("정말 이 자산을 삭제하시겠습니까?")) return;
+        
+        try {
+            const response = await fetch("/portfolio/" + itemId, { 
+                method: "DELETE", 
+                headers: { "Authorization": "Bearer " + token } 
+            });
+            
+            if (response.ok) { 
+                loadPortfolio(); // 삭제 성공 시 리스트 갱신
+            } else {
+                alert("삭제에 실패했습니다.");
+            }
+        } catch (error) { 
+            console.error(error); 
+        }
+    }
+</script>
+{% endblock %}

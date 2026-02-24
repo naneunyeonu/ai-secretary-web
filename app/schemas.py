@@ -80,3 +80,23 @@ class AiBriefingResponse(BaseModel):
     ticker: str
     briefing: str
 
+# 포트폴리오 관련 스키마
+class PortfolioCreate(BaseModel):
+    ticker: str
+    avg_price: float
+    quantity: float
+
+class PortfolioResponse(BaseModel):
+    id: int
+    ticker: str
+    quantity: float
+    avg_price: float
+    current_price: float
+    purchase_amount: float
+    current_valuation: float
+    return_rate: float
+    currency: str
+    krw_valuation: float | None = None # 달러 주식일 경우 원화 환산액
+
+    class Config:
+        orm_mode = True

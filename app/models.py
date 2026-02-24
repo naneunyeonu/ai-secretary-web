@@ -1,5 +1,5 @@
 # app/models.py
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, Float, ForeignKey, DateTime, Text, UniqueConstraint
 # 쿼리문의 JOIN 을 대신함. 간결하게 (user.interests 처럼)
 from sqlalchemy.orm import relationship
 # 데이터베이스 자체 함수를 쓰고 싶을 때 사용
@@ -17,6 +17,8 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     nickname = Column(String)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    # user의 포트폴리오 연결
+    portfolios = relationship("Portfolio", back_populates="owner")
 
     # 관계 설정 (User <-> UserInterest)
     # [수정] cascade옵션을 줘서 유저가 삭제되면 관심사도 같이 삭제되게 함
@@ -67,3 +69,16 @@ class DailyBriefing(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     asset = relationship("Asset")
+
+# 5. 포트폴리오
+class Portfolio(Base):
+    __tablename__ = "portfolios"
+
+    id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id"))
+    
+    ticker = Column(String, index=True) # 종목 코드 (예: VOO, 005930.KS)
+    avg_price = Column(Float)           # 평균 단가
+    quantity = Column(Float)            # 보유 주수 (소수점 거래 가능성을 위해 Float)
+    
+    owner = relationship("User", back_populates="portfolios")

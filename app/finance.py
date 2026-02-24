@@ -176,3 +176,14 @@ def get_price_history_custom(ticker_symbol: str, period: str = "3mo"):
         return {"ticker": ticker_symbol, "history": history_list}
     except Exception:
         return None
+    
+# app/finance.py에 추가
+
+def get_exchange_rate():
+    """실시간 USD/KRW 환율을 가져옵니다."""
+    try:
+        ticker = yf.Ticker("KRW=X")
+        return ticker.fast_info.last_price
+    except Exception as e:
+        print(f"⚠️ 환율 조회 실패: {e}")
+        return 1400.0 # 실패 시 임시 기본값

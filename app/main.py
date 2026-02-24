@@ -100,12 +100,6 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
 def read_users_me(current_user: models.User = Depends(get_current_user)):
     return current_user
 
-# 3. 테스트용 (서버 상태 확인)
-@app.get("/", response_class=HTMLResponse)
-def read_root(request: Request):
-    # base.html 을 상속받은 index.html 예정
-    return templates.TemplateResponse("base.html", {"request": request})
-
 # 로그인 페이지 보이기 (GET)
 @app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request):
@@ -120,6 +114,14 @@ def signup_page(request: Request):
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard_page(request: Request):
     return templates.TemplateResponse("dashboard.html", {"request": request})
+
+# 홈 화면 포트폴리오 보여주기
+@app.get("/", response_class=HTMLResponse)
+def read_home(request: Request):
+    """
+    내 포트폴리오를 보여주는 홈 화면 랜더링
+    """
+    return templates.TemplateResponse("home.html", {"request": request})
 
 
 # ---------------------------------------------------------
@@ -279,3 +281,80 @@ def read_home_chart(ticker: str):
     }
     real_ticker = ticker_map.get(ticker, ticker)
     return finance.get_price_history_custom(real_ticker, period="3mo")
+
+##########################################################################
+# 포트폴리오
+##########################################################################
+# 1. 포트폴리오 종목 추가
+@app.post("/portfolio")
+def add_portfolio_item(item: schemas.PortfolioCreate, db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+    db_item = models.Portfolio(
+        owner_id=user.id,
+        ticker=item.ticker.upper().strip(),
+        avg_price=item.avg_price,
+        quantity=item.quantity
+    )
+    db.add(db_item)
+    db.commit()
+    db.refresh(db_item)
+    return db_item
+
+# 2. 내 포트폴리오 조회 및 실시간 수익률 계산
+@app.get("/portfolio", response_model=List[schemas.PortfolioResponse])
+def read_portfolio(db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+    # 1. DB에서 내 잔고 목록 가져오기
+    items = db.query(models.Portfolio).filter(models.Portfolio.owner_id == user.id).all()
+    
+    # 2. 실시간 환율 가져오기
+    exchange_rate = finance.get_exchange_rate()
+    
+    result = []
+    for item in items:
+        # 실시간 가격 조회
+        price_info = finance.get_current_price(item.ticker)
+        if not price_info:
+            continue
+            
+        current_price = price_info['price']
+        currency = price_info['currency']
+        
+        # 계산 로직
+        purchase_amount = item.avg_price * item.quantity      # 매수 금액
+        current_valuation = current_price * item.quantity     # 현재 평가 금액
+        
+        # 수익률 계산 (0으로 나누기 방지)
+        if item.avg_price > 0:
+            return_rate = ((current_price - item.avg_price) / item.avg_price) * 100
+        else:
+            return_rate = 0.0
+
+        # 원화 환산 (미국 주식인 경우)
+        krw_valuation = None
+        if currency == "USD":
+            krw_valuation = current_valuation * exchange_rate
+
+        result.append({
+            "id": item.id,
+            "ticker": item.ticker,
+            "quantity": item.quantity,
+            "avg_price": item.avg_price,
+            "current_price": current_price,
+            "purchase_amount": purchase_amount,
+            "current_valuation": current_valuation,
+            "return_rate": return_rate,
+            "currency": currency,
+            "krw_valuation": krw_valuation
+        })
+        
+    return result
+
+# 3. 포트폴리오 종목 삭제
+@app.delete("/portfolio/{item_id}")
+def delete_portfolio_item(item_id: int, db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+    db_item = db.query(models.Portfolio).filter(models.Portfolio.id == item_id, models.Portfolio.owner_id == user.id).first()
+    if not db_item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    
+    db.delete(db_item)
+    db.commit()
+    return {"message": "Deleted successfully"}
