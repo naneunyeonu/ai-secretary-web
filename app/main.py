@@ -119,9 +119,18 @@ def dashboard_page(request: Request):
 @app.get("/", response_class=HTMLResponse)
 def read_home(request: Request):
     """
-    내 포트폴리오를 보여주는 홈 화면 랜더링
+    메인 홈 화면 렌더링
     """
     return templates.TemplateResponse("home.html", {"request": request})
+
+# 포트폴리오 전용 화면 추가
+@app.get("/my-portfolio", response_class=HTMLResponse)
+def portfolio_page(request: Request):
+    """
+    내 잔고를 보여주는 포트폴리오 화면 랜더링
+    """
+    # 템플릿 이름을 portfolio.html 로 지정
+    return templates.TemplateResponse("portfolio.html", {"request": request})
 
 
 # ---------------------------------------------------------
